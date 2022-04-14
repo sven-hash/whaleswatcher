@@ -11,6 +11,7 @@
 
 
 Basic: `python3 main.py --no-bot --debug  -t 1000 -tt 1000 -gt 10000`
+
 No message send on twitter or telegram (for debug purpose): `python3 main.py --no-bot --debug  -t 1000 -tt 1000 -gt 10000  -i 1`
 
 # Parameters
