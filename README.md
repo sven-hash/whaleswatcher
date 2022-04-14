@@ -1,5 +1,9 @@
 # whaleswatcher
 
+# Used in
+- https://t.me/alphwhalesalert
+- https://t.me/alephiumin
+
 # How to start
 ```
 1. pip install pipenv
