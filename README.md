@@ -8,7 +8,8 @@
 ```
 1. pip install pipenv
 2. pipenv install
-3. pipenv run python main.py
+3. cp .env.example .env (and adapt the values)
+4. pipenv run python main.py
 ```
 
 ## Example
