@@ -3,6 +3,7 @@ import os
 import random
 import time
 import timeit
+import traceback
 from datetime import datetime
 
 import requests
@@ -39,7 +40,7 @@ ALPH = '\u2135'
 GATEIO_WSS_URL = "wss://ws.gate.io/v3/"
 
 
-def stats(twitterBot, telegramBot, statHandler,telegramChannelId):
+def stats(twitterBot, telegramBot, statHandler, telegramChannelId):
     dayOneRange = Utils.timeRangeDays(1)
     dayThreeRange = Utils.timeRangeDays(3)
 
@@ -93,17 +94,18 @@ def stats(twitterBot, telegramBot, statHandler,telegramChannelId):
     tweet += f"\n{hex(random.randint(1, 100000))}"
 
     # only for telegram
-    #text += f"\nPowered by [metapool.tech](https://www.metapool.tech)"
+    # text += f"\nPowered by [metapool.tech](https://www.metapool.tech)"
 
     twitterBot.sendMessage(tweet[:280])
-    telegramBot.sendMessage(text,telegramChannelId)
+    telegramBot.sendMessage(text, telegramChannelId)
 
 
-def statsTicker(twitterBot, telegramBot, tickerHandler, statHandler,telegramChannelId):
+def statsTicker(twitterBot, telegramBot, tickerHandler, statHandler, telegramChannelId):
     apiPrice = tickerHandler.getStats()
 
     if apiPrice is not None:
         data = apiPrice.get('ALPH_USDT')
+
         dataOther = apiPrice.get('coingecko')['alephium']
 
         high24 = float(data.get('high_24h'))
@@ -145,12 +147,30 @@ Volume: {alphVolume} {ALPH} / {usdtVolume} USDT
         tweet += "From #gateio\n#stat #price #alephium #blockchain"
         twitterBot.sendMessage(tweet[:280])
         text += "From https://gate.io/trade/ALPH\\_USDT\n\n#stat #price"
-        telegramBot.sendMessage(text,telegramChannelId)
+        telegramBot.sendMessage(text, telegramChannelId)
 
 
 def exchangesWatcher(alertAmount, twitterBot, telegramBot):
     try:
         GateioWss(GATEIO_WSS_URL, alertAmount, twitterBot, telegramBot)
+    except Exception as e:
+        print(e)
+
+
+def statsMessages(watcher, twitterBot, telegramBot, tickerHandler, telegramChatId, statsEnabled, debug):
+    print("\nStart stats messages thread")
+    try:
+        if statsEnabled:
+            logPooler = Stats('alephium', watcher)
+            schedule.every().hour.at(":00").do(stats, twitterBot, telegramBot, logPooler, telegramChatId)
+            schedule.every().hour.at(":30").do(statsTicker, twitterBot, telegramBot, tickerHandler, logPooler,
+                                               telegramChatId)
+
+            if debug:
+                pass
+                #schedule.every().second.do(statsTicker, twitterBot, telegramBot, tickerHandler, logPooler, telegramChatId)
+                #schedule.every().second.do(stats, twitterBot, telegramBot, logPooler, telegramChatId)
+
     except Exception as e:
         print(e)
 
@@ -187,25 +207,20 @@ def main(minAmountAlert, botEnabled, intervalReq, statsEnabled, minAmountAlertTw
     telegramBot = TelegramBot(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, botEnabled, monitor)
     twitterBot = TwitterBot(TWITTER_CONSUMER_API_KEY, TWITTER_CONSUMER_SECRET,
                             TWITTER_BEARER_TOKEN, TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_SECRET, botEnabled, monitor)
-    thread.start_new_thread(exchangesWatcher,
-                            (minAmountAlertGate, twitterBot, telegramBot))
 
     s = requests.Session()
 
     tickerHandler = Ticker(session=s, pairs=['ALPH_USDT'], apiTicker=API_TICKER)
 
-    watcher = WhalesWatcher(s, telegramBot, twitterBot, minAmountAlert, minAmountAlertTweet, tickerHandler)
+    watcher = WhalesWatcher(s, telegramBot, twitterBot, minAmountAlert, minAmountAlertTweet, tickerHandler, debug=debug)
 
-    if statsEnabled:
-        logPooler = Stats('alephium', watcher)
-        schedule.every().hour.at(":00").do(stats, twitterBot, telegramBot, logPooler,TELEGRAM_CHAT_ID_INSIGHT_CHANNEL)
-        schedule.every().hour.at(":30").do(statsTicker, twitterBot, telegramBot, tickerHandler, logPooler,TELEGRAM_CHAT_ID_INSIGHT_CHANNEL)
+    thread.start_new_thread(exchangesWatcher,
+                            (minAmountAlertGate, twitterBot, telegramBot))
 
-        if debug:
-            schedule.every().second.do(statsTicker, twitterBot, telegramBot, tickerHandler, logPooler,TELEGRAM_CHAT_ID_INSIGHT_CHANNEL)
-            schedule.every().second.do(stats, twitterBot, telegramBot, logPooler,TELEGRAM_CHAT_ID_INSIGHT_CHANNEL)
+    thread.start_new_thread(statsMessages, (watcher, twitterBot, telegramBot,tickerHandler,
+                                            TELEGRAM_CHAT_ID_INSIGHT_CHANNEL,statsEnabled, debug))
 
-    print("Retrieve genesis adresses: ")
+    print("Retrieve genesis adresses")
     print(f"{watcher.getGenesisAddresses()}")
 
     timestampPast = int(time.time() - intervalReq)
@@ -216,7 +231,7 @@ def main(minAmountAlert, botEnabled, intervalReq, statsEnabled, minAmountAlertTw
     try:
         while True:
             timestampNow = int(time.time())
-            print(datetime.fromtimestamp(timestampPast), datetime.fromtimestamp(timestampNow))
+            print(f"\n{datetime.fromtimestamp(timestampPast)}, {datetime.fromtimestamp(timestampNow)}")
 
             txs = watcher.getBlockTsTransactions(timestampPast, timestampNow)
             timestampPast = int(time.time())
@@ -232,7 +247,7 @@ def main(minAmountAlert, botEnabled, intervalReq, statsEnabled, minAmountAlertTw
                     txsUnconfirmed.add(transaction)
 
             if len(txsUnconfirmed) > 0:
-                print("\nUnconfirmed txs:\n"+'\n'.join(map(str, txsUnconfirmed)))
+                print("Unconfirmed txs:\n" + '\n'.join(map(str, txsUnconfirmed)))
             for transaction in list(txsUnconfirmed):
                 checked = watcher.getBlockTransaction(transaction)
                 if checked:
@@ -249,9 +264,9 @@ def main(minAmountAlert, botEnabled, intervalReq, statsEnabled, minAmountAlertTw
             if sleepTime > 0:
                 time.sleep(sleepTime)
     except Exception as e:
-        print(e.with_traceback())
-        if not debug:
-            monitor.sendMessage('Watcher', 'Stop working', f'Main app had a problem or was shutdown\n{e}')
+        print(traceback.format_exc())
+
+        monitor.sendMessage('Watcher', 'Stop working', f'Main app had a problem or was shutdown\n{e}')
 
 
 if __name__ == '__main__':
@@ -274,7 +289,7 @@ if __name__ == '__main__':
     parser.add_argument("-gt", "--gatethreshold", help="Threshold amount to send message for gateio", default=5000,
                         type=float)
 
-    parser.add_argument("-i", "--interval", help="Interval request in seconds", default=120, type=int)
+    parser.add_argument("-i", "--interval", help="Interval request in seconds", default=45, type=int)
 
     args = parser.parse_args()
 

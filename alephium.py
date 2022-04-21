@@ -18,12 +18,13 @@ API_EXPLORER_BASE = "https://mainnet-backend.alephium.org"
 
 class WhalesWatcher:
 
-    def __init__(self, session, telegramBot, twitterBot, minAmountAlert, minAmountAlertTweet, tickerHandler):
+    def __init__(self, session, telegramBot, twitterBot, minAmountAlert, minAmountAlertTweet, tickerHandler,debug=False):
         self.session = session
         self.minAmountAlert = minAmountAlert
         self.minAmountAlertTweet = minAmountAlertTweet
         self.telegramBot = telegramBot
         self.twitterBot = twitterBot
+        self.debug = debug
 
         self.ticker = tickerHandler
 
@@ -109,7 +110,7 @@ class WhalesWatcher:
         response = self.session.get(f"{API_BASE}/blockflow?fromTs={start * 1000}&toTs={end * 1000}")
 
         allBlocks = response.json()
-        # pprint(allBlocks)
+
         for inBlock in allBlocks['blocks']:
             for block in inBlock:
                 for transaction in block['transactions']:
@@ -133,11 +134,13 @@ class WhalesWatcher:
     @backoff.on_exception(backoff.expo, (requests.exceptions.ConnectionError, requests.exceptions.Timeout))
     def getBlockTransaction(self, transaction):
         response = self.session.get(f"{API_EXPLORER_BASE}/transactions/{transaction}")
-        print(f"\nTransaction id: https://explorer.alephium.org/#/transactions/{transaction}")
 
         tx = response.json()
-        txStatus = tx.get('type')
-        print(f"Tx status: {txStatus}")
+        txStatus = str.lower(tx.get('type'))
+
+        if self.debug:
+            print(f"\nTransaction id: https://explorer.alephium.org/#/transactions/{transaction}, Tx status: {txStatus}")
+
         try:
             alphPrice = self.ticker.gatePrice()['ALPH_USDT']
         except Exception as e:

@@ -5,15 +5,12 @@ name = "pypi"
 
 [packages]
 requests = "*"
-tqdm = "*"
 python-telegram-bot = "*"
 python-dotenv = "*"
 backoff ="*"
 schedule = "*"
 tweepy = "*"
-base58 = "*"
 aiohttp = "*"
-docker = "*"
 websocket-client = "*"
 
 [dev-packages]

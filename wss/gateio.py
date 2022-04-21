@@ -112,7 +112,6 @@ class GateioWss:
         }
         self.ws.send(json.dumps(data))
         print(f"Connected to {self.wssURL}, method: {self.method}")
-        #thread.start_new_thread(run, (self.method, self.pair))
 
 
 def handler(signum, frame):

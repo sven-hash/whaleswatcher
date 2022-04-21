@@ -1,6 +1,3 @@
-import re
-import select
-import subprocess
 import time
 from statistics import mean,StatisticsError
 import requests
