@@ -136,7 +136,9 @@ class WhalesWatcher:
         response = self.session.get(f"{API_EXPLORER_BASE}/transactions/{transaction}")
 
         tx = response.json()
-        txStatus = str.lower(tx.get('type'))
+        
+        if tx.get('type') is not None:
+            txStatus = str.lower(tx.get('type'))
 
         if self.debug:
             print(f"\nTransaction id: https://explorer.alephium.org/#/transactions/{transaction}, Tx status: {txStatus}")
