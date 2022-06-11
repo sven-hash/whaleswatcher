@@ -1,8 +1,10 @@
+import json
 import logging
 import os
 
 import backoff
 import requests
+from utils import Utils
 
 GENESIS_TS = 1231006504
 FIRST_BLOCK_TS = 1636383298
@@ -12,19 +14,25 @@ MINERS_ADDRESSES_FILE = 'address2name/miners.txt'
 GENESIS_ADDRESSES_FILE = 'address2name/genesis.txt'
 CLAIMED_ADDRESSES_FILE = 'address2name/known-wallets.txt'
 
-API_BASE = "http://127.0.0.1:12973"
-API_EXPLORER_BASE = "https://mainnet-backend.alephium.org"
+API_BASE = Utils.apiBase
+API_EXPLORER_BASE = Utils.apiExplorerBase
+
+TIMEOUT_REQ = 10
 
 
 class WhalesWatcher:
 
-    def __init__(self, session, telegramBot, twitterBot, minAmountAlert, minAmountAlertTweet, tickerHandler,debug=False):
+    def __init__(self, session, telegramBot, twitterBot, minAmountAlert, minAmountAlertTweet, tickerHandler,
+                 debug=False, fullnode_api_key=""):
         self.session = session
         self.minAmountAlert = minAmountAlert
         self.minAmountAlertTweet = minAmountAlertTweet
         self.telegramBot = telegramBot
         self.twitterBot = twitterBot
         self.debug = debug
+        self.headers = {}
+        if fullnode_api_key != "":
+            self.headers = {'X-API-KEY': fullnode_api_key}
 
         self.ticker = tickerHandler
 
@@ -47,8 +55,12 @@ class WhalesWatcher:
             return True
 
         try:
-            response = self.session.get(f"{API_EXPLORER_BASE}/addresses/{addr}/transactions")
-            tx = response.json()
+            response = self.session.get(f"{API_EXPLORER_BASE}/addresses/{addr}/transactions", timeout=TIMEOUT_REQ)
+            try:
+                tx = json.loads(response.text)
+            except Exception as e:
+                print(response.content)
+                print(e)
 
             for transaction in tx:
                 if transaction.get('type') == 'confirmed' and len(transaction.get('inputs')) <= 0:
@@ -87,7 +99,8 @@ class WhalesWatcher:
 
         try:
             response = self.session.get(
-                f"{API_BASE}/blockflow?fromTs={GENESIS_TS * 1000}&toTs={(GENESIS_TS + 5) * 1000}")
+                f"{API_BASE}/blockflow?fromTs={GENESIS_TS * 1000}&toTs={(GENESIS_TS + 5) * 1000}", headers=self.headers,
+                timeout=TIMEOUT_REQ)
 
             for inner_blocks in response.json()['blocks']:
                 for block in inner_blocks:
@@ -107,8 +120,8 @@ class WhalesWatcher:
     @backoff.on_exception(backoff.expo, (requests.exceptions.ConnectionError, requests.exceptions.Timeout))
     def getBlockTsTransactions(self, start, end):
         txs = []
-        response = self.session.get(f"{API_BASE}/blockflow?fromTs={start * 1000}&toTs={end * 1000}")
-
+        response = self.session.get(f"{API_BASE}/blockflow?fromTs={start * 1000}&toTs={end * 1000}",
+                                    headers=self.headers, timeout=TIMEOUT_REQ)
         allBlocks = response.json()
 
         for inBlock in allBlocks['blocks']:
@@ -121,7 +134,7 @@ class WhalesWatcher:
 
     @backoff.on_exception(backoff.expo, (requests.exceptions.ConnectionError, requests.exceptions.Timeout))
     def getUnconfirmedTransactions(self):
-        response = self.session.get(f"{API_BASE}/transactions/unconfirmed")
+        response = self.session.get(f"{API_BASE}/transactions/unconfirmed", headers=self.headers, timeout=TIMEOUT_REQ)
         unconfirmedTxs = response.json()
         unconfirmedTxsId = set()
 
@@ -133,17 +146,28 @@ class WhalesWatcher:
 
     @backoff.on_exception(backoff.expo, (requests.exceptions.ConnectionError, requests.exceptions.Timeout))
     def getBlockTransaction(self, transaction):
-        response = self.session.get(f"{API_EXPLORER_BASE}/transactions/{transaction}")
+        response = self.session.get(f"{API_EXPLORER_BASE}/transactions/{transaction}", timeout=TIMEOUT_REQ)
+        respTxStatus = self.session.get(f"{API_BASE}/transactions/status?txId={transaction}", headers=self.headers,
+                                        timeout=TIMEOUT_REQ).json()
+        try:
+            tx = json.loads(response.text)
+        except Exception as e:
+            print(response.content)
+            print(e)
 
-        tx = response.json()
-
-        if tx.get('type') is not None:
-            txStatus = str.lower(tx.get('type'))
+        if respTxStatus.get('type') is not None:
+            txStatus = str.lower(respTxStatus.get('type'))
         else:
             txStatus = None
 
+        if tx.get('type') is not None:
+            txExplorerStatus = str.lower(tx.get('type'))
+        else:
+            txExplorerStatus = None
+
         if self.debug:
-            print(f"\nTransaction id: https://explorer.alephium.org/#/transactions/{transaction}, Tx status: {txStatus}")
+            print(
+                f"\nTransaction id: https://explorer.alephium.org/#/transactions/{transaction}, Tx status: {txStatus}")
 
         try:
             alphPrice = self.ticker.gatePrice()['ALPH_USDT']
@@ -151,8 +175,7 @@ class WhalesWatcher:
             print(e)
             alphPrice = 0
 
-        if txStatus == 'confirmed':
-
+        if txStatus == 'confirmed' and txExplorerStatus == 'confirmed':
             for input in tx['inputs']:
                 addressIn = input['address']
 
@@ -177,7 +200,7 @@ class WhalesWatcher:
                     self.telegramBot.sendMessage(text)
 
             return True
-        elif txStatus == 'unconfirmed' or txStatus is None:
+        elif txStatus == 'unconfirmed' or txStatus is None or txStatus == 'confirmed' or txExplorerStatus == 'confirmed':
             return False
 
     @staticmethod

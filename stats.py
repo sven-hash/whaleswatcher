@@ -1,9 +1,14 @@
 import time
 from statistics import mean,StatisticsError
+
+import backoff
 import requests
 
-API_BASE = "http://127.0.0.1:12973"
-API_EXPLORER_BASE = "https://mainnet-backend.alephium.org"
+from utils import Utils
+
+API_BASE = Utils.apiBase
+API_EXPLORER_BASE = Utils.apiExplorerBase
+
 ALPH_BASE = 10 ** 18
 
 
@@ -13,6 +18,7 @@ class Stats:
         self.watcher = watcherHandler
 
     @staticmethod
+    @backoff.on_exception(backoff.expo, (requests.exceptions.ConnectionError, requests.exceptions.Timeout), max_tries=7)
     def avgHashrateAPI(timeSince=None, timeUntil=None):
         if timeUntil is None:
             timeUntil = time.time()
@@ -35,6 +41,7 @@ class Stats:
             return 0
 
     @staticmethod
+    @backoff.on_exception(backoff.expo, (requests.exceptions.ConnectionError, requests.exceptions.Timeout), max_tries=5)
     def circulatingAlph():
         try:
             s = requests.Session()
@@ -45,6 +52,7 @@ class Stats:
             return None
 
     @staticmethod
+    @backoff.on_exception(backoff.expo, (requests.exceptions.ConnectionError, requests.exceptions.Timeout), max_tries=5)
     def rewardMining():
         # from capito27
         s = requests.Session()

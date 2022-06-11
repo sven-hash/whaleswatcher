@@ -25,9 +25,9 @@ except ImportError:
     import _thread as thread
 
 # base code from https://github.com/capito27
-API_BASE = "http://127.0.0.1:12973"
-API_EXPLORER_BASE = "https://mainnet-backend.alephium.org"
-API_TICKER = "http://alephium.ono.re"
+API_BASE = Utils.apiBase
+API_EXPLORER_BASE = Utils.apiExplorerBase
+API_TICKER = Utils.apiTicker
 
 GENESIS_TS = 1231006504
 FIRST_BLOCK_TS = 1636383298
@@ -193,6 +193,8 @@ def main(minAmountAlert, botEnabled, intervalReq, statsEnabled, minAmountAlertTw
     SMTP_RECEIVER = os.getenv("SMTP_RECEIVER")
     SMTP_FROM = os.getenv("SMTP_FROM")
 
+    fullnode_api_key = os.getenv("FULLNODE_API_KEY","")
+
     print(
         f"Start options:\n\tbot enabled: {botEnabled}\n"
         f"\tinterval request: {intervalReq}\n"
@@ -212,7 +214,7 @@ def main(minAmountAlert, botEnabled, intervalReq, statsEnabled, minAmountAlertTw
 
     tickerHandler = Ticker(session=s, pairs=['ALPH_USDT'], apiTicker=API_TICKER)
 
-    watcher = WhalesWatcher(s, telegramBot, twitterBot, minAmountAlert, minAmountAlertTweet, tickerHandler, debug=debug)
+    watcher = WhalesWatcher(s, telegramBot, twitterBot, minAmountAlert, minAmountAlertTweet, tickerHandler, debug=debug,fullnode_api_key=fullnode_api_key)
 
     thread.start_new_thread(exchangesWatcher,
                             (minAmountAlertGate, twitterBot, telegramBot))

@@ -1,7 +1,14 @@
+import os
 from datetime import datetime,timedelta
+
+from dotenv import load_dotenv
 
 
 class Utils:
+    load_dotenv()
+    apiBase = os.getenv("API_BASE")
+    apiExplorerBase = os.getenv("API_EXPLORER_BASE")
+    apiTicker = os.getenv("API_TICKER")
 
     @staticmethod
     def timeRange(delta):
