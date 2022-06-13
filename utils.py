@@ -9,6 +9,7 @@ class Utils:
     apiBase = os.getenv("API_BASE")
     apiExplorerBase = os.getenv("API_EXPLORER_BASE")
     apiTicker = os.getenv("API_TICKER")
+    apiKey = {'X-API-KEY': os.getenv("FULLNODE_API_KEY")}
 
     @staticmethod
     def timeRange(delta):

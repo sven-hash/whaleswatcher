@@ -169,7 +169,7 @@ def statsMessages(watcher, twitterBot, telegramBot, tickerHandler, telegramChatI
             if debug:
                 pass
                 #schedule.every().second.do(statsTicker, twitterBot, telegramBot, tickerHandler, logPooler, telegramChatId)
-                #schedule.every().second.do(stats, twitterBot, telegramBot, logPooler, telegramChatId)
+                schedule.every().second.do(stats, twitterBot, telegramBot, logPooler, telegramChatId)
 
     except Exception as e:
         print(e)

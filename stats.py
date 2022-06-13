@@ -13,7 +13,7 @@ ALPH_BASE = 10 ** 18
 
 
 class Stats:
-    def __init__(self, unitName, watcherHandler):
+    def __init__(self, unitName, watcherHandler,):
         self.unitName = unitName
         self.watcher = watcherHandler
 
@@ -27,7 +27,9 @@ class Stats:
 
         session = requests.Session()
         response = session.get(
-            f"{API_BASE}/infos/history-hashrate?fromTs={int(timeSince) * 1000}&toTs={int(timeUntil) * 1000}")
+            f"{API_BASE}/infos/history-hashrate?fromTs={int(timeSince) * 1000}&toTs={int(timeUntil) * 1000}",
+            headers=Utils.apiKey)
+
         if response.json().get('hashrate'):
             hashrate = float(response.json().get('hashrate').split(' ')[0].strip())
             if hashrate > 0:
@@ -45,7 +47,7 @@ class Stats:
     def circulatingAlph():
         try:
             s = requests.Session()
-            response = s.get(f"{API_EXPLORER_BASE}/infos/supply/circulating-alph")
+            response = s.get(f"{API_EXPLORER_BASE}/infos/supply/circulating-alph",headers=Utils.apiKey)
             return "{:,.0f}".format(float(response.text)).replace(',', ' ')
         except requests.exceptions as e:
             print(e)
@@ -58,7 +60,7 @@ class Stats:
         s = requests.Session()
         try:
             for block in s.get(f'{API_EXPLORER_BASE}/blocks').json()['blocks']:
-                transaction = s.get(f"{API_EXPLORER_BASE}/blocks/{block['hash']}/transactions").json()
+                transaction = s.get(f"{API_EXPLORER_BASE}/blocks/{block['hash']}/transactions",headers=Utils.apiKey).json()
 
                 for data in transaction:
                     if len(data['inputs']) <= 0 < len(data.get('outputs')):
