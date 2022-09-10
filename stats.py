@@ -18,7 +18,7 @@ class Stats:
         self.watcher = watcherHandler
 
     @staticmethod
-    @backoff.on_exception(backoff.expo, (requests.exceptions.ConnectionError, requests.exceptions.Timeout), max_tries=7)
+    @backoff.on_exception(backoff.expo, (requests.exceptions.ConnectionError, requests.exceptions.Timeout), max_tries=Utils.BACKOFF_MAX_TRIES)
     def avgHashrateAPI(timeSince=None, timeUntil=None):
         if timeUntil is None:
             timeUntil = time.time()
@@ -26,9 +26,13 @@ class Stats:
         avgHashrate = list()
 
         session = requests.Session()
-        response = session.get(
-            f"{API_BASE}/infos/history-hashrate?fromTs={int(timeSince) * 1000}&toTs={int(timeUntil) * 1000}",
-            headers=Utils.apiKey)
+        try:
+            response = session.get(
+                f"{API_BASE}/infos/history-hashrate?fromTs={int(timeSince) * 1000}&toTs={int(timeUntil) * 1000}",
+                headers=Utils.apiKey,timeout=Utils.TIMEOUT_REQ)
+        except Exception as e:
+            print(e)
+            return 0
 
         if response.json().get('hashrate'):
             hashrate = float(response.json().get('hashrate').split(' ')[0].strip())
@@ -43,24 +47,24 @@ class Stats:
             return 0
 
     @staticmethod
-    @backoff.on_exception(backoff.expo, (requests.exceptions.ConnectionError, requests.exceptions.Timeout), max_tries=5)
+    @backoff.on_exception(Utils.BACKOFF_ALGO, (requests.exceptions.ConnectionError, requests.exceptions.Timeout), max_tries=Utils.BACKOFF_MAX_TRIES)
     def circulatingAlph():
         try:
             s = requests.Session()
-            response = s.get(f"{API_EXPLORER_BASE}/infos/supply/circulating-alph",headers=Utils.apiKey)
+            response = s.get(f"{API_EXPLORER_BASE}/infos/supply/circulating-alph",headers=Utils.apiKey,timeout=Utils.TIMEOUT_REQ)
             return "{:,.0f}".format(float(response.text)).replace(',', ' ')
         except requests.exceptions as e:
             print(e)
-            return None
+            return ""
 
     @staticmethod
-    @backoff.on_exception(backoff.expo, (requests.exceptions.ConnectionError, requests.exceptions.Timeout), max_tries=5)
+    @backoff.on_exception(Utils.BACKOFF_ALGO, (requests.exceptions.ConnectionError, requests.exceptions.Timeout), max_tries=Utils.BACKOFF_MAX_TRIES)
     def rewardMining():
         # from capito27
         s = requests.Session()
         try:
             for block in s.get(f'{API_EXPLORER_BASE}/blocks').json()['blocks']:
-                transaction = s.get(f"{API_EXPLORER_BASE}/blocks/{block['hash']}/transactions",headers=Utils.apiKey).json()
+                transaction = s.get(f"{API_EXPLORER_BASE}/blocks/{block['hash']}/transactions",headers=Utils.apiKey,timeout=Utils.TIMEOUT_REQ).json()
 
                 for data in transaction:
                     if len(data['inputs']) <= 0 < len(data.get('outputs')):

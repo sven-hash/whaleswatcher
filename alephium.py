@@ -17,7 +17,7 @@ CLAIMED_ADDRESSES_FILE = 'address2name/known-wallets.txt'
 API_BASE = Utils.apiBase
 API_EXPLORER_BASE = Utils.apiExplorerBase
 
-TIMEOUT_REQ = 10
+TIMEOUT_REQ = 120
 
 
 class WhalesWatcher:
@@ -31,6 +31,7 @@ class WhalesWatcher:
         self.twitterBot = twitterBot
         self.debug = debug
         self.headers = {}
+
         if fullnode_api_key != "":
             self.headers = {'X-API-KEY': fullnode_api_key}
 
@@ -55,7 +56,7 @@ class WhalesWatcher:
             return True
 
         try:
-            response = self.session.get(f"{API_EXPLORER_BASE}/addresses/{addr}/transactions", timeout=TIMEOUT_REQ)
+            response = self.session.get(f"{API_EXPLORER_BASE}/addresses/{addr}/transactions", timeout=Utils.TIMEOUT_REQ)
             try:
                 tx = json.loads(response.text)
             except Exception as e:
@@ -92,7 +93,7 @@ class WhalesWatcher:
 
         return formattedAddr, exchange
 
-    @backoff.on_exception(backoff.expo, (requests.exceptions.ConnectionError, requests.exceptions.Timeout), max_tries=5)
+    @backoff.on_exception(Utils.BACKOFF_ALGO, (requests.exceptions.ConnectionError, requests.exceptions.Timeout), max_tries=Utils.BACKOFF_MAX_TRIES)
     def getGenesisAddresses(self):
         # GENESIS_URL = "https://raw.githubusercontent.com/alephium/alephium/master/flow/src/main/resources/mainnet_genesis.conf"
         addresses = set()
@@ -100,7 +101,7 @@ class WhalesWatcher:
         try:
             response = self.session.get(
                 f"{API_BASE}/blockflow?fromTs={GENESIS_TS * 1000}&toTs={(GENESIS_TS + 5) * 1000}", headers=self.headers,
-                timeout=TIMEOUT_REQ)
+                timeout=Utils.TIMEOUT_REQ)
 
             for inner_blocks in response.json()['blocks']:
                 for block in inner_blocks:
@@ -108,7 +109,7 @@ class WhalesWatcher:
                         for txUnsigned in tx['unsigned']['fixedOutputs']:
                             addresses.add(txUnsigned['address'])
 
-        except requests.exceptions.ConnectionError as e:
+        except Exception as e:
             print(e)
             return False
 
@@ -117,26 +118,40 @@ class WhalesWatcher:
 
         return True
 
-    @backoff.on_exception(backoff.expo, (requests.exceptions.ConnectionError, requests.exceptions.Timeout))
+    @backoff.on_exception(Utils.BACKOFF_ALGO, (requests.exceptions.ConnectionError, requests.exceptions.Timeout),max_tries=Utils.BACKOFF_MAX_TRIES)
     def getBlockTsTransactions(self, start, end):
         txs = []
-        response = self.session.get(f"{API_BASE}/blockflow?fromTs={start * 1000}&toTs={end * 1000}",
-                                    headers=self.headers, timeout=TIMEOUT_REQ)
-        allBlocks = response.json()
+        try:
+            response = self.session.get(f"{API_BASE}/blockflow?fromTs={start * 1000}&toTs={end * 1000}",
+                                    headers=self.headers, timeout=Utils.TIMEOUT_REQ)
+            allBlocks = response.json()
+        except Exception as e:
+            print(e)
+            return txs
 
-        for inBlock in allBlocks['blocks']:
-            for block in inBlock:
-                for transaction in block['transactions']:
-                    if len(transaction['unsigned']['inputs']) > 0:
-                        txs.append(transaction['unsigned']['txId'])
 
-        return txs
+        try:
+            for inBlock in allBlocks['blocks']:
+                for block in inBlock:
+                    for transaction in block['transactions']:
+                        if len(transaction['unsigned']['inputs']) > 0:
+                            txs.append(transaction['unsigned']['txId'])
 
-    @backoff.on_exception(backoff.expo, (requests.exceptions.ConnectionError, requests.exceptions.Timeout))
+            return txs
+        except KeyError as e:
+            print(e)
+            return txs
+
+    @backoff.on_exception(Utils.BACKOFF_ALGO, (requests.exceptions.ConnectionError, requests.exceptions.Timeout),max_tries=Utils.BACKOFF_MAX_TRIES)
     def getUnconfirmedTransactions(self):
-        response = self.session.get(f"{API_BASE}/transactions/unconfirmed", headers=self.headers, timeout=TIMEOUT_REQ)
-        unconfirmedTxs = response.json()
         unconfirmedTxsId = set()
+        try:
+            response = self.session.get(f"{API_BASE}/transactions/unconfirmed", headers=self.headers,
+                                       timeout=Utils.TIMEOUT_REQ)
+            unconfirmedTxs = response.json()
+        except Exception as e:
+            print(e)
+            return unconfirmedTxsId
 
         for unconfirmed in unconfirmedTxs:
             for tx in unconfirmed['unconfirmedTransactions']:
@@ -144,16 +159,27 @@ class WhalesWatcher:
 
         return unconfirmedTxsId
 
-    @backoff.on_exception(backoff.expo, (requests.exceptions.ConnectionError, requests.exceptions.Timeout))
+    @backoff.on_exception(Utils.BACKOFF_ALGO, (requests.exceptions.ConnectionError, requests.exceptions.Timeout),max_tries=Utils.BACKOFF_MAX_TRIES)
     def getBlockTransaction(self, transaction):
-        response = self.session.get(f"{API_EXPLORER_BASE}/transactions/{transaction}", timeout=TIMEOUT_REQ)
-        respTxStatus = self.session.get(f"{API_BASE}/transactions/status?txId={transaction}", headers=self.headers,
-                                        timeout=TIMEOUT_REQ).json()
+        try:
+            response = self.session.get(f"{API_EXPLORER_BASE}/transactions/{transaction}", timeout=Utils.TIMEOUT_REQ)
+            respTxStatus = self.session.get(f"{API_BASE}/transactions/status?txId={transaction}", headers=self.headers,
+                                            timeout=Utils.TIMEOUT_REQ)
+
+            if not response.ok or not respTxStatus.ok:
+                return False
+
+        except Exception as e:
+            print(e)
+            return False
+
+        respTxStatus = respTxStatus.json()
         try:
             tx = json.loads(response.text)
         except Exception as e:
             print(response.content)
             print(e)
+            return False
 
         if respTxStatus.get('type') is not None:
             txStatus = str.lower(respTxStatus.get('type'))
@@ -175,31 +201,44 @@ class WhalesWatcher:
             print(e)
             alphPrice = 0
 
+
+        addressIn = None
         if txStatus == 'confirmed' and txExplorerStatus == 'confirmed':
-            for input in tx['inputs']:
-                addressIn = input['address']
+            for inputTx in tx['inputs']:
+                try:
+                    addressIn = inputTx['address']
+                except KeyError as e:
+                    print(e)
+                    return False
+            try:
+                if addressIn is not None:
+                    for output in tx['outputs']:
+                        amount = float(output['attoAlphAmount']) / ALPH_BASE
+                        addressOut = output['address']
+                        if addressIn != addressOut and amount >= self.minAmountAlert:
 
-            for output in tx['outputs']:
-                amount = float(output['amount']) / ALPH_BASE
-                addressOut = output['address']
-                if addressIn != addressOut and amount >= self.minAmountAlert:
+                            addressInTxt, exchangeIn = self.formatAddress(addressIn)
+                            addressOutTxt, exchangeOut = self.formatAddress(addressOut)
 
-                    addressInTxt, exchangeIn = self.formatAddress(addressIn)
-                    addressOutTxt, exchangeOut = self.formatAddress(addressOut)
+                            if amount >= self.minAmountAlertTweet:
+                                text = WhalesWatcher.formatMessage(amount, addressInTxt, addressOutTxt, transaction,
+                                                                   self.isMinerAddress(addressIn),
+                                                                   self.isGenesisAddress(addressIn), exchangeIn, exchangeOut,
+                                                                   isTwitter=True, alphPrice=alphPrice)
+                                self.twitterBot.sendMessage(text)
 
-                    if amount >= self.minAmountAlertTweet:
-                        text = WhalesWatcher.formatMessage(amount, addressInTxt, addressOutTxt, transaction,
-                                                           self.isMinerAddress(addressIn),
-                                                           self.isGenesisAddress(addressIn), exchangeIn, exchangeOut,
-                                                           isTwitter=True, alphPrice=alphPrice)
-                        self.twitterBot.sendMessage(text)
+                            text = WhalesWatcher.formatMessage(amount, addressInTxt, addressOutTxt, transaction,
+                                                               self.isMinerAddress(addressIn), self.isGenesisAddress(addressIn),
+                                                               exchangeIn, exchangeOut, isTwitter=False, alphPrice=alphPrice)
+                            self.telegramBot.sendMessage(text)
 
-                    text = WhalesWatcher.formatMessage(amount, addressInTxt, addressOutTxt, transaction,
-                                                       self.isMinerAddress(addressIn), self.isGenesisAddress(addressIn),
-                                                       exchangeIn, exchangeOut, isTwitter=False, alphPrice=alphPrice)
-                    self.telegramBot.sendMessage(text)
+                    return True
+                else:
+                    return False
+            except KeyError as e:
+                print(f"error key: {e}")
+                return False
 
-            return True
         elif txStatus == 'unconfirmed' or txStatus is None or txStatus == 'confirmed' or txExplorerStatus == 'confirmed':
             return False
 
@@ -261,7 +300,7 @@ class WhalesWatcher:
         if isGenesis:
             text += "#genesis "
         elif isMiner:
-            text += "#miner"
+            text += "#miner "
 
         if not isTwitter:
             text += "#blockchain"

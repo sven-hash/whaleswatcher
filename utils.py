@@ -1,6 +1,7 @@
 import os
 from datetime import datetime,timedelta
 
+import backoff
 from dotenv import load_dotenv
 
 
@@ -10,6 +11,9 @@ class Utils:
     apiExplorerBase = os.getenv("API_EXPLORER_BASE")
     apiTicker = os.getenv("API_TICKER")
     apiKey = {'X-API-KEY': os.getenv("FULLNODE_API_KEY")}
+    BACKOFF_MAX_TRIES = 120
+    BACKOFF_ALGO = backoff.constant
+    TIMEOUT_REQ = 120
 
     @staticmethod
     def timeRange(delta):

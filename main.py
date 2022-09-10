@@ -20,7 +20,7 @@ from utils import Utils
 from wss.gateio import GateioWss
 
 try:
-    import thread
+    import threading
 except ImportError:
     import _thread as thread
 
@@ -38,6 +38,8 @@ CLAIMED_ADDRESSES_FILE = 'address2name/known-wallets.txt'
 ALPH = '\u2135'
 
 GATEIO_WSS_URL = "wss://ws.gate.io/v3/"
+
+txsUnconfirmed = set()
 
 
 def stats(twitterBot, telegramBot, statHandler, telegramChannelId):
@@ -166,76 +168,25 @@ def statsMessages(watcher, twitterBot, telegramBot, tickerHandler, telegramChatI
             schedule.every().hour.at(":30").do(statsTicker, twitterBot, telegramBot, tickerHandler, logPooler,
                                                telegramChatId)
 
-            if debug:
-                pass
-                #schedule.every().second.do(statsTicker, twitterBot, telegramBot, tickerHandler, logPooler, telegramChatId)
+            if False:
+                schedule.every().second.do(statsTicker, twitterBot, telegramBot, tickerHandler, logPooler,
+                                           telegramChatId)
                 schedule.every().second.do(stats, twitterBot, telegramBot, logPooler, telegramChatId)
 
     except Exception as e:
         print(e)
 
 
-def main(minAmountAlert, botEnabled, intervalReq, statsEnabled, minAmountAlertTweet, debug, minAmountAlertGate):
-    load_dotenv()
-    TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-    TELEGRAM_CHAT_ID = os.getenv("CHAT_ID")
-    TELEGRAM_CHAT_ID_INSIGHT_CHANNEL = os.getenv("CHAT_ID_INSIGHT")
-
-    TWITTER_CONSUMER_API_KEY = os.getenv("TWITTER_CONSUMER_API_KEY")
-    TWITTER_CONSUMER_SECRET = os.getenv("TWITTER_CONSUMER_SECRET")
-    TWITTER_BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN")
-    TWITTER_ACCESS_TOKEN = os.getenv("TWITTER_ACCESS_TOKEN")
-    TWITTER_ACCESS_SECRET = os.getenv("TWITTER_ACCESS_SECRET")
-
-    SMTP_SERVER = os.getenv("SMTP_SERVER")
-    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
-    SMTP_USER = os.getenv("SMTP_USER")
-    SMTP_RECEIVER = os.getenv("SMTP_RECEIVER")
-    SMTP_FROM = os.getenv("SMTP_FROM")
-
-    fullnode_api_key = os.getenv("FULLNODE_API_KEY","")
-
-    print(
-        f"Start options:\n\tbot enabled: {botEnabled}\n"
-        f"\tinterval request: {intervalReq}\n"
-        f"\tthreshold alert: {minAmountAlert}\n"
-        f"\ttweet threshold alert: {minAmountAlertTweet}\n"
-        f"\tgate threshold alert: {minAmountAlertGate}\n"
-        f"\tstats: {statsEnabled}"
-    )
-
-    monitor = Monitor(SMTP_SERVER, SMTP_USER, SMTP_PASSWORD, SMTP_RECEIVER, SMTP_FROM)
-
-    telegramBot = TelegramBot(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, botEnabled, monitor)
-    twitterBot = TwitterBot(TWITTER_CONSUMER_API_KEY, TWITTER_CONSUMER_SECRET,
-                            TWITTER_BEARER_TOKEN, TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_SECRET, botEnabled, monitor)
-
-    s = requests.Session()
-
-    tickerHandler = Ticker(session=s, pairs=['ALPH_USDT'], apiTicker=API_TICKER)
-
-    watcher = WhalesWatcher(s, telegramBot, twitterBot, minAmountAlert, minAmountAlertTweet, tickerHandler, debug=debug,fullnode_api_key=fullnode_api_key)
-
-    thread.start_new_thread(exchangesWatcher,
-                            (minAmountAlertGate, twitterBot, telegramBot))
-
-    thread.start_new_thread(statsMessages, (watcher, twitterBot, telegramBot,tickerHandler,
-                                            TELEGRAM_CHAT_ID_INSIGHT_CHANNEL,statsEnabled, debug))
-
-    print("Retrieve genesis adresses")
-    print(f"{watcher.getGenesisAddresses()}")
-
-    timestampPast = int(time.time() - intervalReq)
-
-    # store the unconfirmed transactions
-    txsUnconfirmed = set()
-
+def txWatcher(watcher, intervalReq, timestampPast):
+    global txsUnconfirmed
     try:
         while True:
+
             timestampNow = int(time.time())
             print(f"\n{datetime.fromtimestamp(timestampPast)}, {datetime.fromtimestamp(timestampNow)}")
 
             txs = watcher.getBlockTsTransactions(timestampPast, timestampNow)
+
             timestampPast = int(time.time())
 
             # remove from sleep time the amount time used to compute transaction id
@@ -266,9 +217,80 @@ def main(minAmountAlert, botEnabled, intervalReq, statsEnabled, minAmountAlertTw
             if sleepTime > 0:
                 time.sleep(sleepTime)
     except Exception as e:
-        print(traceback.format_exc())
+        print(e)
+        return False
 
-        monitor.sendMessage('Watcher', 'Stop working', f'Main app had a problem or was shutdown\n{e}')
+
+def main(minAmountAlert, botEnabled, intervalReq, statsEnabled, minAmountAlertTweet, debug, minAmountAlertGate):
+    load_dotenv()
+    TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+    TELEGRAM_CHAT_ID = os.getenv("CHAT_ID")
+    TELEGRAM_CHAT_ID_INSIGHT_CHANNEL = os.getenv("CHAT_ID_INSIGHT")
+
+    TWITTER_CONSUMER_API_KEY = os.getenv("TWITTER_CONSUMER_API_KEY")
+    TWITTER_CONSUMER_SECRET = os.getenv("TWITTER_CONSUMER_SECRET")
+    TWITTER_BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN")
+    TWITTER_ACCESS_TOKEN = os.getenv("TWITTER_ACCESS_TOKEN")
+    TWITTER_ACCESS_SECRET = os.getenv("TWITTER_ACCESS_SECRET")
+
+    SMTP_SERVER = os.getenv("SMTP_SERVER")
+    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
+    SMTP_USER = os.getenv("SMTP_USER")
+    SMTP_RECEIVER = os.getenv("SMTP_RECEIVER")
+    SMTP_FROM = os.getenv("SMTP_FROM")
+
+    fullnode_api_key = os.getenv("FULLNODE_API_KEY", "")
+
+    print(
+        f"Start options:\n\tbot enabled: {botEnabled}\n"
+        f"\tinterval request: {intervalReq}\n"
+        f"\tthreshold alert: {minAmountAlert}\n"
+        f"\ttweet threshold alert: {minAmountAlertTweet}\n"
+        f"\tgate threshold alert: {minAmountAlertGate}\n"
+        f"\tstats: {statsEnabled}"
+    )
+
+    monitor = Monitor(SMTP_SERVER, SMTP_USER, SMTP_PASSWORD, SMTP_RECEIVER, SMTP_FROM)
+
+    telegramBot = TelegramBot(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, botEnabled, monitor)
+    twitterBot = TwitterBot(TWITTER_CONSUMER_API_KEY, TWITTER_CONSUMER_SECRET,
+                            TWITTER_BEARER_TOKEN, TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_SECRET, botEnabled, monitor)
+
+    s = requests.Session()
+
+    tickerHandler = Ticker(session=s, pairs=['ALPH_USDT'], apiTicker=API_TICKER)
+
+    watcher = WhalesWatcher(s, telegramBot, twitterBot, minAmountAlert, minAmountAlertTweet, tickerHandler, debug=debug,
+                            fullnode_api_key=fullnode_api_key)
+
+    exchangeWatcherTh = threading.Thread(target=exchangesWatcher, args=(minAmountAlertGate, twitterBot, telegramBot))
+    exchangeWatcherTh.start()
+
+    statsMessagesTh = threading.Thread(target=statsMessages, args=(watcher, twitterBot, telegramBot, tickerHandler,
+                                                                   TELEGRAM_CHAT_ID_INSIGHT_CHANNEL, statsEnabled,
+                                                                   debug))
+    statsMessagesTh.start()
+
+    print("\nRetrieve genesis adresses")
+    print(f"{watcher.getGenesisAddresses()}")
+
+    timestampPast = int(time.time() - intervalReq)
+
+    # store the unconfirmed transactions
+    global txsUnconfirmed
+    try:
+        if debug:
+            print(txsUnconfirmed)
+        txWatcher(watcher, intervalReq, timestampPast)
+
+    except Exception as e:
+        monitor.sendMessage('Watcher', 'Stopped',
+                            f'Main app had a problem or was shutdown\n{e}, {intervalReq}, {timestampPast},{txsUnconfirmed}')
+        print("Terminate the thread")
+        os.kill()
+        statsMessagesTh.join(10)
+        exchangeWatcherTh.join(10)
+
 
 
 if __name__ == '__main__':
