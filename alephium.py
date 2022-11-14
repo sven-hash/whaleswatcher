@@ -100,7 +100,7 @@ class WhalesWatcher:
 
         try:
             response = self.session.get(
-                f"{API_BASE}/blockflow?fromTs={GENESIS_TS * 1000}&toTs={(GENESIS_TS + 5) * 1000}", headers=self.headers,
+                f"{API_BASE}/blockflow/blocks?fromTs={GENESIS_TS * 1000}&toTs={(GENESIS_TS + 5) * 1000}", headers=self.headers,
                 timeout=Utils.TIMEOUT_REQ)
 
             for inner_blocks in response.json()['blocks']:
@@ -122,7 +122,7 @@ class WhalesWatcher:
     def getBlockTsTransactions(self, start, end):
         txs = []
         try:
-            response = self.session.get(f"{API_BASE}/blockflow?fromTs={start * 1000}&toTs={end * 1000}",
+            response = self.session.get(f"{API_BASE}/blockflow/blocks?fromTs={start * 1000}&toTs={end * 1000}",
                                     headers=self.headers, timeout=Utils.TIMEOUT_REQ)
             allBlocks = response.json()
         except Exception as e:
@@ -302,8 +302,12 @@ class WhalesWatcher:
         elif isMiner:
             text += "#miner "
 
+        if isTwitter:
+            text += f"\nhttps://medium.com/@alephium/ttxoo-2-the-road-to-self-custody-cfea4ae89444"
+            
         if not isTwitter:
             text += "#blockchain"
             text += f"\n\n[TX link](https://explorer.alephium.org/#/transactions/{transactionId})"
-
+            text += f"\n[Road to self custody](https://medium.com/@alephium/ttxoo-2-the-road-to-self-custody-cfea4ae89444)"
+        
         return text
