@@ -93,12 +93,15 @@ def stats(twitterBot, telegramBot, statHandler, telegramChannelId):
     tweet = text
     tweet += " #alephium #blockchain"
     tweet += "\n\nhttps://explorer.alephium.org"
+    tweet += f"\nhttps://medium.com/@alephium/ttxoo-2-the-road-to-self-custody-cfea4ae89444"     
     tweet += f"\n{hex(random.randint(1, 100000))}"
 
     # only for telegram
     # text += f"\nPowered by [metapool.tech](https://www.metapool.tech)"
-
+    
     twitterBot.sendMessage(tweet[:280])
+    
+    text += f"\n[Road to self custody](https://medium.com/@alephium/ttxoo-2-the-road-to-self-custody-cfea4ae89444)"
     telegramBot.sendMessage(text, telegramChannelId)
 
 
@@ -146,9 +149,12 @@ Volume: {alphVolume} {ALPH} / {usdtVolume} USDT
 
 """
         tweet = text
-        tweet += "From #gateio\n#stat #price #alephium #blockchain"
+        tweet += f"From #gateio\n#stat #price #alephium #blockchain"
+        tweet += f"\nhttps://medium.com/@alephium/ttxoo-2-the-road-to-self-custody-cfea4ae89444"     
         twitterBot.sendMessage(tweet[:280])
-        text += "From https://gate.io/trade/ALPH\\_USDT\n\n#stat #price"
+        
+        text += f"From https://gate.io/trade/ALPH\\_USDT\n\n#stat #price"
+        text += f"\n[Road to self custody](https://medium.com/@alephium/ttxoo-2-the-road-to-self-custody-cfea4ae89444)"
         telegramBot.sendMessage(text, telegramChannelId)
 
 
