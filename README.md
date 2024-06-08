@@ -1,3 +1,5 @@
+**Moved to https://github.com/notrustverify/alephium-whales-watcher**
+
 # whaleswatcher
 
 # Used in
